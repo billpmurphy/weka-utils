@@ -201,7 +201,7 @@ public class WekaUtils {
 	 * @param classifier the base classifier
 	 * @param data the set of instances
 	 * @param folds the number of cross-validation folds to use when optimizing
-	 * @return
+	 * @return the best threshold classifer
 	 * @throws Exception
 	 */
 	public static ThresholdSelector optimizeThreshold(Classifier classifier, Instances data, double[] probabilities,
@@ -220,6 +220,19 @@ public class WekaUtils {
 			}
 		}
 		return bestClassifier;
+	}
+	
+	/**
+	 * Remove a percentage of a dataset for easy testing
+	 * @param data the set of instances
+	 * @param percentage the percent of the data to remove
+	 * @return the dataset without x% of its instances
+	 */
+	public static Instances removePercentage(Instances data, double percentage) throws Exception{
+		RemovePercentage rp = new RemovePercentage();
+		rp.setInputFormat(data);
+		rp.setPercentage(percentage);
+		return Filter.useFilter(data, rp);
 	}
 	
 }

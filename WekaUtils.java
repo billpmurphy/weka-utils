@@ -4,13 +4,14 @@
  *    Some simple methods to make working with the Weka API a little easier
  *
  */
-
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.util.Random;
 
 import weka.attributeSelection.BestFirst;
 import weka.attributeSelection.CfsSubsetEval;
 import weka.classifiers.Classifier;
+import weka.classifiers.Evaluation;
 import weka.classifiers.functions.MultilayerPerceptron;
 import weka.classifiers.functions.SMO;
 import weka.classifiers.functions.supportVector.RBFKernel;
@@ -19,6 +20,7 @@ import weka.classifiers.meta.AdaBoostM1;
 import weka.classifiers.meta.Bagging;
 import weka.classifiers.meta.CVParameterSelection;
 import weka.classifiers.meta.LogitBoost;
+import weka.classifiers.meta.ThresholdSelector;
 import weka.classifiers.trees.BFTree;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.LMT;
@@ -78,6 +80,50 @@ public class WekaUtils {
 	}
 	
 	/**
+	 * Evaluate a model on a dataset with cross-validation
+	 * @param classifer the classifier to be used
+	 * @param data the set of instances
+	 * @param folds the number of cross-validation folds
+	 * @return the evaluation result
+	 * @throws Exception
+	 */
+	public static Evaluation crossValidate(Classifier classifer, Instances data, int folds) throws Exception {
+		Evaluation eval = new Evaluation(data);
+		eval.crossValidateModel(classifer, data, folds, new Random(1)); 
+		return eval;
+	}
+
+	/**
+	 * Cross-validate a set of models on a dataset 
+	 * @param classifiers the array of classifiers to use
+	 * @param data the dataset
+	 * @param folds the number of folds to use in cross-validation
+	 * @return an Evaluation object with the results
+	 * @throws Exception
+	 */
+	public static Evaluation[] evaluateClassifiers(Classifier[] classifiers, Instances data, int folds) throws Exception {
+		Evaluation[] results = new Evaluation[classifiers.length];
+		for(int i = 0; i < results.length; i++) {
+			results[i] = crossValidate(classifiers[i], data, folds);
+		}
+		return results;
+	}
+	
+	/**
+	 * Find best result from list of cross-validation results based on f-measure
+	 * @param results the Evalation objects to search
+	 * @return the best Evaluation object
+	 */
+	public static int bestResult(Evaluation[] results) throws Exception {
+		int best = 0;
+		for(int i = 0; i < results.length; i++){
+			if (results[i].weightedFMeasure() > results[best].weightedFMeasure())
+				best = i;
+		}
+		return best;
+	}
+	
+	/**
 	 * Basic parameter tuning for some common classifiers
 	 * @param classifiers the classifiers to optimize
 	 * @param data the dataset
@@ -132,6 +178,48 @@ public class WekaUtils {
 			classifiers[i].setOptions(optimizedClassifier.getClassifier().getOptions());
 		}
 		return classifiers;
+	}
+	
+	/**
+	 * Create a ThresholdSelector classifier given a threshold value
+	 * @param classifier the base classifier
+	 * @param data the set of instances
+	 * @param threshold the probability threshold
+	 * @return
+	 * @throws Exception
+	 */
+	public static ThresholdSelector createThresholdSelector(Classifier classifier, Instances data, double threshold) throws Exception {
+		ThresholdSelector ts = new ThresholdSelector();
+		ts.setClassifier(classifier);
+		ts.setManualThresholdValue(threshold);
+		ts.buildClassifier(data);
+		return ts;
+	}
+	
+	/**
+	 * Select the probability threshold that maximizes the F-measure when classifying
+	 * @param classifier the base classifier
+	 * @param data the set of instances
+	 * @param folds the number of cross-validation folds to use when optimizing
+	 * @return
+	 * @throws Exception
+	 */
+	public static ThresholdSelector optimizeThreshold(Classifier classifier, Instances data, double[] probabilities,
+			double alpha, double beta) throws Exception{
+		ThresholdSelector bestClassifier = new ThresholdSelector();
+		double bestResult = 0; 
+		double resultValue; 
+		//optimize based on result f-measure
+		for(double probability : probabilities) {
+			ThresholdSelector thresholdClassifier = createThresholdSelector(classifier, data, probability);
+			Evaluation result = crossValidate(thresholdClassifier, data, 10);
+			resultValue = result.weightedFMeasure();
+			if (resultValue > bestResult) {
+				bestClassifier = thresholdClassifier;
+				bestResult = resultValue;
+			}
+		}
+		return bestClassifier;
 	}
 	
 }
